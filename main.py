@@ -1,121 +1,139 @@
-from google_trans_new import google_translator
+import os
 import telebot
 from telebot import types
+from google_trans_new import google_translator
 
-bot_token = 'your bot token' # you can get token from botFather in Telegram
-bot = telebot.TeleBot(token=bot_token)
+
+# =========================
+# Bot Configuration
+# =========================
+
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+
+bot = telebot.TeleBot(BOT_TOKEN)
 translator = google_translator()
 
-#languages of users can translate
-lang_dict = {
-    '🇺🇿Узбекский':'uz',
-    '🇷🇺Руский':'ru',
-    '🇦🇪Арбский':'ar',
-    '🇫🇷Французкий':'fr',
-    '🇹🇷Туретский':'tr',
-    '🇧🇴Испанский':'es',
-    '🇩🇪Немецкий':'de',
-    '🇬🇧Англизкий':'en',
-    '🇮🇹Италянский':'it' }
 
-# inline buttons for choosing language for translate
-lang_btns = types.InlineKeyboardMarkup(row_width=2)
-uzbtn = types.InlineKeyboardButton(text='🇺🇿Узбекский', callback_data='uz')
-rubtn = types.InlineKeyboardButton(text='🇦🇪Арбский', callback_data='ar')
-frbtn = types.InlineKeyboardButton(text='🇷🇺Руский', callback_data='ru')
-arbtn = types.InlineKeyboardButton(text='🇫🇷Французкий', callback_data='fr')
-trbtn = types.InlineKeyboardButton(text= '🇹🇷Туретский', callback_data='tr')
-esbtn = types.InlineKeyboardButton(text='🇧🇴Испанский' , callback_data='es')
-debtn = types.InlineKeyboardButton(text='🇩🇪Немецкий', callback_data='de')
-itbtn = types.InlineKeyboardButton(text= '🇮🇹Италянский', callback_data='it')
-enbtn = types.InlineKeyboardButton(text= '🇬🇧Англизкий', callback_data= 'en')
-lang_btns.add(uzbtn,rubtn,arbtn,frbtn,trbtn,esbtn,debtn,itbtn,enbtn)
+# =========================
+# Supported Languages
+# =========================
 
-#message_hendler for hendling /start command
-@bot.message_handler(commands=['start'])
+LANGUAGES = {
+    "🇺🇿 Uzbek": "uz",
+    "🇷🇺 Russian": "ru",
+    "🇬🇧 English": "en",
+    "🇹🇷 Turkish": "tr",
+    "🇫🇷 French": "fr",
+    "🇩🇪 German": "de",
+    "🇪🇸 Spanish": "es",
+    "🇮🇹 Italian": "it",
+    "🇸🇦 Arabic": "ar",
+}
+
+
+# This dictionary stores users' last messages
+user_messages = {}
+
+
+# =========================
+# Keyboard Function
+# =========================
+
+def create_language_keyboard():
+    keyboard = types.InlineKeyboardMarkup(row_width=2)
+
+    buttons = [
+        types.InlineKeyboardButton(text=language, callback_data=code)
+        for language, code in LANGUAGES.items()
+    ]
+
+    keyboard.add(*buttons)
+    return keyboard
+
+
+# =========================
+# Start Command
+# =========================
+
+@bot.message_handler(commands=["start"])
 def send_welcome(message):
-    bot.send_message(message.chat.id,text='Привет я бот переводчик.\nОтпрайте мне текст я перевожу')
+    welcome_text = (
+        "👋 Welcome to Translator Bot!\n\n"
+        "Send me any text, and I will translate it into the language you choose."
+    )
 
-mes = ['',0]
-
-#message_hendler for hendling message of users send to translate
-@bot.message_handler()
-def messager(message):
-    mes[0] = message.text
-    mes[1] = message.chat.id
-    bot.send_message(message.chat.id,text=f'Ваш текст : {message.text}'
-                                          f'\n\nвыберите язык перевода',reply_markup=lang_btns)
+    bot.send_message(message.chat.id, welcome_text)
 
 
-#callback_query_hendler for inlinebuttons users can choose and translate text
+# =========================
+# Message Handler
+# =========================
+
+@bot.message_handler(content_types=["text"])
+def handle_message(message):
+    chat_id = message.chat.id
+    text = message.text
+
+    user_messages[chat_id] = text
+
+    bot.send_message(
+        chat_id,
+        f"Your text:\n\n{text}\n\nChoose a language:",
+        reply_markup=create_language_keyboard()
+    )
+
+
+# =========================
+# Callback Handler
+# =========================
+
 @bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    message_chat_id  = mes[1]
-    message_text = mes[0]
-    if call.data == 'uz':
-        translated_message = translator.translate(message_text,lang_tgt='uz')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇺🇿Узбекского языка\n\n' \
-                       f'🇺🇿 {translated_message}'
-        bot.send_message( message_chat_id,text=message_send)
+def handle_language_selection(call):
+    chat_id = call.message.chat.id
+    language_code = call.data
 
-    elif call.data == 'ru':
-        translated_message = translator.translate(message_text,lang_tgt='ru')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇷🇺Руского языка\n\n' \
-                       f'🇷🇺 {translated_message}'
-        bot.send_message( message_chat_id,text=message_send)
+    original_text = user_messages.get(chat_id)
 
-    elif call.data == 'ar':
-        translated_message = translator.translate(message_text,lang_tgt='ar')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇦🇪Арбского языка\n\n' \
-                       f'🇦🇪 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+    if not original_text:
+        bot.send_message(chat_id, "Please send a text first.")
+        return
 
-    elif call.data == 'fr':
-        translated_message = translator.translate(message_text,lang_tgt='fr')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇫🇷Французкого языка\n\n' \
-                       f'🇫🇷 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+    try:
+        translated_text = translator.translate(original_text, lang_tgt=language_code)
 
-    elif call.data == 'tr':
-        translated_message = translator.translate(message_text,lang_tgt='tr')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇹🇷Туретского языка\n\n' \
-                       f'🇹🇷 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+        language_name = get_language_name(language_code)
 
-    elif call.data == 'es':
-        translated_message = translator.translate(message_text,lang_tgt='es')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇧🇴Испанского языка\n\n' \
-                       f'🇧🇴 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+        response = (
+            f"Original text:\n{original_text}\n\n"
+            f"Translated to {language_name}:\n{translated_text}"
+        )
+
+        bot.send_message(chat_id, response)
+
+    except Exception as error:
+        bot.send_message(
+            chat_id,
+            "Sorry, something went wrong while translating your text."
+        )
+        print(f"Translation error: {error}")
 
 
-    elif call.data == 'de':
-        translated_message = translator.translate(message_text,lang_tgt='de')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇩🇪Немецкого языка\n\n' \
-                       f'🇩🇪 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+# =========================
+# Helper Function
+# =========================
 
-    elif call.data == 'it':
-        translated_message = translator.translate(message_text,lang_tgt='it')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇮🇹Италянского языка\n\n' \
-                       f'🇮🇹 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+def get_language_name(language_code):
+    for language_name, code in LANGUAGES.items():
+        if code == language_code:
+            return language_name
 
-    elif call.data == 'en':
-        translated_message = translator.translate(message_text,lang_tgt='en')
-        message_send = f'Ваш текст: {message_text}\n\n' \
-                       f'перевод на 🇬🇧Англизкого языка\n\n' \
-                       f'🇬🇧 {translated_message}'
-        bot.send_message(message_chat_id, text=message_send)
+    return language_code
 
-print('working...')
 
-bot.polling(none_stop=True)
+# =========================
+# Run Bot
+# =========================
+
+if __name__ == "__main__":
+    print("Translator bot is running...")
+    bot.polling(none_stop=True)
